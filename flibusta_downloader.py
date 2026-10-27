@@ -175,9 +175,24 @@ class FlibustaClient:
                 elif "жанр" in key:
                     meta_info["genres"] = [a.get_text().strip() for a in val_td.find_all("a")]
 
-        # Извлечение книг серии
+        # Извлечение книг серии со всех страниц (на сайте по 50 книг на странице)
+        book_input_pattern = re.compile(r"^bchk\d+")
+        book_inputs = soup.find_all("input", attrs={"name": book_input_pattern})
+
+        last_page = 0
+        for a in soup.find_all("a", href=True):
+            page_match = re.search(rf"/sequence/{series_id}\?page=(\d+)", a["href"])
+            if page_match:
+                last_page = max(last_page, int(page_match.group(1)))
+
+        for page in range(1, last_page + 1):
+            page_resp = self.request("GET", f"{url}?page={page}")
+            if page_resp.status_code != 200:
+                raise RuntimeError(f"Ошибка загрузки страницы {page + 1} серии {series_id}: HTTP {page_resp.status_code}")
+            page_soup = BeautifulSoup(page_resp.text, "html.parser")
+            book_inputs.extend(page_soup.find_all("input", attrs={"name": book_input_pattern}))
+
         books: List[Dict[str, Any]] = []
-        book_inputs = soup.find_all("input", attrs={"name": re.compile(r"^bchk\d+")})
 
         for idx, inp in enumerate(book_inputs, start=1):
             book_id = inp["name"].replace("bchk", "")
